@@ -885,7 +885,7 @@ public class DubboBootstrap extends GenericEventListener {
     /**
      * Start the bootstrap
      */
-    public DubboBootstrap start() {
+    public DubboBootstrap  start() {
         if (started.compareAndSet(false, true)) {
             ready.set(false);
             initialize();

@@ -156,10 +156,14 @@ public class AdaptiveClassCodeGenerator {
      * generate method declaration
      */
     private String generateMethod(Method method) {
+        // 方法返回值
         String methodReturnType = method.getReturnType().getCanonicalName();
+        // 方法名
         String methodName = method.getName();
         String methodContent = generateMethodContent(method);
+        // 方法参数
         String methodArgs = generateMethodArguments(method);
+        // 方法异常
         String methodThrows = generateMethodThrows(method);
         return String.format(CODE_METHOD_DECLARATION, methodReturnType, methodName, methodArgs, methodThrows, methodContent);
     }
@@ -203,9 +207,11 @@ public class AdaptiveClassCodeGenerator {
         if (adaptiveAnnotation == null) {
             return generateUnsupported(method);
         } else {
+            // 遍历参数列表，确定 URL 参数位置
             int urlTypeIndex = getUrlTypeIndex(method);
 
             // found parameter in URL type
+            // urlTypeIndex != -1，表示参数列表中存在 URL 参数
             if (urlTypeIndex != -1) {
                 // Null Point check
                 code.append(generateUrlNullCheck(urlTypeIndex));
@@ -219,14 +225,21 @@ public class AdaptiveClassCodeGenerator {
             boolean hasInvocation = hasInvocationArgument(method);
 
             code.append(generateInvocationArgumentNullCheck(method));
-
+            // 生成代码：
+            // String extName = (url.getProtocol() == null ? "dubbo" : url.getProtocol()); 或
+            // String extName = url.getMethodParameter(methodName, "loadbalance", "random"); 或
+            // String extName = url.getParameter("client", url.getParameter("transporter", "netty")); 或其他
             code.append(generateExtNameAssignment(value, hasInvocation));
             // check extName == null?
             code.append(generateExtNameNullCheck(value));
-
+            // 生成拓展获取代码，格式如下：
+            // type全限定名 extension = (type全限定名)ExtensionLoader全限定名
+            //     .getExtensionLoader(type全限定名.class).getExtension(extName);
+            // Tips: 格式化字符串中的 %<s 表示使用前一个转换符所描述的参数，即 type 全限定名
             code.append(generateExtensionAssignment());
 
-            // return statement
+            // return statement  如果方法返回值类型非 void，则生成 return 语句。
+            // 生成目标方法调用逻辑   extension.方法名(arg0, arg2, ..., argN);
             code.append(generateReturnAndInvocation(method));
         }
 
@@ -248,7 +261,10 @@ public class AdaptiveClassCodeGenerator {
         String getNameCode = null;
         for (int i = value.length - 1; i >= 0; --i) {
             if (i == value.length - 1) {
+                // 默认拓展名非空
                 if (null != defaultExtName) {
+                    // protocol 是 url 的一部分，可通过 getProtocol 方法获取，其他的则是从
+                    // URL 参数中获取。因为获取方式不同，所以这里要判断 value[i] 是否为 protocol
                     if (!"protocol".equals(value[i])) {
                         if (hasInvocation) {
                             getNameCode = String.format("url.getMethodParameter(methodName, \"%s\", \"%s\")", value[i], defaultExtName);
@@ -289,6 +305,10 @@ public class AdaptiveClassCodeGenerator {
      * @return
      */
     private String generateExtensionAssignment() {
+        // // 生成拓展获取代码，格式如下：
+        //        // type全限定名 extension = (type全限定名)ExtensionLoader全限定名
+        //        //     .getExtensionLoader(type全限定名.class).getExtension(extName);
+        //        // Tips: 格式化字符串中的 %<s 表示使用前一个转换符所描述的参数，即 type 全限定名
         return String.format(CODE_EXTENSION_ASSIGNMENT, type.getName(), ExtensionLoader.class.getSimpleName(), type.getName());
     }
 
@@ -349,8 +369,14 @@ public class AdaptiveClassCodeGenerator {
         Map<String, Integer> getterReturnUrl = new HashMap<>();
         // find URL getter method
         for (int i = 0; i < pts.length; ++i) {
+            // 获取某一类型参数的全部方法
             for (Method m : pts[i].getMethods()) {
                 String name = m.getName();
+                // 1. 方法名以 get 开头，或方法名大于3个字符
+                // 2. 方法的访问权限为 public
+                // 3. 非静态方法
+                // 4. 方法参数数量为0
+                // 5. 方法返回值类型为 URL
                 if ((name.startsWith("get") || name.length() > 3)
                         && Modifier.isPublic(m.getModifiers())
                         && !Modifier.isStatic(m.getModifiers())
@@ -362,6 +388,7 @@ public class AdaptiveClassCodeGenerator {
         }
 
         if (getterReturnUrl.size() <= 0) {
+            // 如果所有参数中均不包含可返回 URL 的 getter 方法，则抛出异常
             // getter method not found, throw
             throw new IllegalStateException("Failed to create adaptive class for interface " + type.getName()
                     + ": not found url parameter or url attribute in parameters of method " + method.getName());
